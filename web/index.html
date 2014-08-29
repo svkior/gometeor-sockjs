@@ -1,25 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
+
+<html>
 <head>
-<script type="text/javascript" src="http://cdn.sockjs.org/sockjs-0.3.min.js"></script>
-<script type="text/javascript" src="app.js"></script>
-<meta charset="UTF-8">
-<title>Chat Web Example</title>
+    <link rel="stylesheet" type="text/css" class="__meteor-css__" href="/web.browser/1fad0b23389de7a291849848bb784f1d549bca03.css">
+    <script type="text/javascript">
+        __meteor_runtime_config__ = {
+            "meteorRelease":"METEOR@0.9.0.1",
+            "ROOT_URL":"http://localhost:3000/",
+            "ROOT_URL_PATH_PREFIX":""/*,
+             "autoupdateVersion":"b9f3309a9e97805c62fee1d96e50ed0e585b840f",
+             "autoupdateVersionRefreshable":"0f3ca4b876857ee250f9be8ae7dc8158a7357672"*/
+        };
+    </script>
+
+    <script type="text/javascript" src="/web.browser/f638a924a8970d4bd465eee7bc2fd69a319bfade.js"></script>
 </head>
-
 <body>
-<h1>Chat - Web Example </h1>
-<form onsubmit='sock.send(document.getElementById("input").value); return false'>
-Input text: <input id="input" focus="true"/>
-<input type="submit" disabled="true" id="send" value="Send"/>
-</form>
-
-<br/>
-
-Messages from server:<br/>
-<textarea cols=80 rows=20 id="output"></textarea>
-<br/>
-status: <span id="status"> connecting...</span>
-
 </body>
 </html>
