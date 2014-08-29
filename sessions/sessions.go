@@ -226,6 +226,7 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 
 					fmt.Println("Method Name: ", methodName)
 					fmt.Println("Method ID: ", methodId)
+					fmt.Println("Params: ", m2)
 					//for a, b := range methodParams {
 					//	fmt.Println("Params: ", a, " => ", b, " <Type> => ", reflect.TypeOf(b))
 					//}
@@ -233,8 +234,10 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 
 					if midx := ms.GetMethodIdx(methodName); midx == -1 {
 						log.Println("There is no such method", methodName)
+						transmitter <- "{\"msg\" :  \"result\", \"id\" : \"" + methodId + "\", \"error\" : \"method-not-found\" }"
 					} else {
 						log.Println("We have method:", methodName)
+						ms.CallMethodByIdx(midx)
 					}
 
 					neeedPrint = false
