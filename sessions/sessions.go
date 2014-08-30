@@ -51,7 +51,7 @@ func (ms *MeteorSessions) IsSubscribed(idx int, name string) bool {
 	return ms.sessions[idx].IsSubcribed(name)
 }
 
-func (ms *MeteorSessions) AddMethod(mName string, f func()) {
+func (ms *MeteorSessions) AddMethod(mName string, f func(params interface{})) {
 	m := meteorMethods.Create(mName, f)
 	ms.methods = append(ms.methods, m)
 }
@@ -65,8 +65,8 @@ func (ms *MeteorSessions) GetMethodIdx(name string) int {
 	return -1
 }
 
-func (ms *MeteorSessions) CallMethodByIdx(idx int) {
-	ms.methods[idx].CallMethod()
+func (ms *MeteorSessions) CallMethodByIdx(idx int, params interface{}) {
+	ms.methods[idx].CallMethod(params)
 }
 
 // Добавить сессию в коллекцию
@@ -237,7 +237,7 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 						transmitter <- "{\"msg\" :  \"result\", \"id\" : \"" + methodId + "\", \"error\" : \"method-not-found\" }"
 					} else {
 						log.Println("We have method:", methodName)
-						ms.CallMethodByIdx(midx)
+						ms.CallMethodByIdx(midx, m2)
 					}
 
 					neeedPrint = false

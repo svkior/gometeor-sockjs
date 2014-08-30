@@ -51,3 +51,7 @@ func (fw Firmwares) GetAllJSON() (s chan string) {
 	}()
 	return
 }
+
+func (fw Firmwares) Scan4DAV(params interface{}) {
+	fmt.Println("Hello, World!")
+}

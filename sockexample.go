@@ -4,7 +4,7 @@ import (
 	"./firmwares"
 	"./sessions"
 	"./stringrand"
-	"fmt"
+	//"fmt"
 	"github.com/igm/pubsub"
 	"gopkg.in/igm/sockjs-go.v2/sockjs"
 	"log"
@@ -21,7 +21,7 @@ func main() {
 	// Забиваем тестовую прошивку
 	firmwares.TestInitFirmwares(&fw)
 
-	ms.AddMethod("scan4dav", func() { fmt.Println("Hello, World!") })
+	ms.AddMethod("scan4dav", fw.Scan4DAV)
 	ms.AddCollection("firmwares", fw)
 
 	// SockJS для Meteor DDP

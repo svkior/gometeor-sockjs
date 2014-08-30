@@ -2,10 +2,10 @@ package meteorMethods
 
 type MeteorMethod struct {
 	name string
-	f    func()
+	f    func(params interface{})
 }
 
-func Create(name string, f func()) MeteorMethod {
+func Create(name string, f func(params interface{})) MeteorMethod {
 	return MeteorMethod{name: name, f: f}
 }
 
@@ -17,6 +17,6 @@ func (m *MeteorMethod) NameEquals(name string) bool {
 	}
 }
 
-func (m *MeteorMethod) CallMethod() {
-	m.f()
+func (m *MeteorMethod) CallMethod(params interface{}) {
+	m.f(params)
 }
