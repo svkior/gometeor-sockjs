@@ -16,13 +16,11 @@ func (s *MeteorSession) GetId() string {
 
 func (ms *MeteorSession) IsSubcribed(name string) bool {
 	//fmt.Println("Hi")
-	for _, c := range ms.subs {
-		//		fmt.Println(c)
-		if c == name {
+	for i := 0; i < len(ms.subs); i++ {
+		if ms.subs[i] == name {
 			return true
 		}
 	}
-	//fmt.Println("Return false")
 	return false
 }
 

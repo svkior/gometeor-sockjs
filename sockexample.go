@@ -2,6 +2,7 @@ package main
 
 import (
 	"./firmwares"
+	//"./mydebug"
 	"./sessions"
 	"./stringrand"
 	//"fmt"
@@ -11,15 +12,22 @@ import (
 	"net/http"
 )
 
-var chat pubsub.Publisher      // Из примера на pubsub
-var fw firmwares.Firmwares     // База данных прошивок
-var ms sessions.MeteorSessions // Сессии метеора
+var chat pubsub.Publisher // Из примера на pubsub
+
+var fw *firmwares.Firmwares     // База данных прошивок
+var ms *sessions.MeteorSessions // Сессии метеора
 
 func main() {
 	// Инициализация счетчика случайных чисел
 	stringrand.Init()
 	// Забиваем тестовую прошивку
-	firmwares.TestInitFirmwares(&fw)
+	//firmwares.TestInitFirmwares(&fw)
+
+	fw = new(firmwares.Firmwares)
+	//mydebug.PrintDebug("FW After new", fw)
+
+	ms = new(sessions.MeteorSessions)
+	//mydebug.PrintDebug("MS After new", ms)
 
 	ms.AddMethod("scan4dav", fw.Scan4DAV)
 	ms.AddCollection("firmwares", fw)

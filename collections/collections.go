@@ -1,5 +1,5 @@
 package collections
 
-type Collection interface {
+type Collectioner interface {
 	GetAllJSON() (s chan string)
 }

@@ -14,7 +14,7 @@ import (
 
 type metCol struct {
 	colName   string // название колекции
-	colStruct *collections.Collection
+	colStruct *collections.Collectioner
 }
 
 // Коллекция сессий с метеором
@@ -31,7 +31,7 @@ func (ms *MeteorSessions) Subscribe(idx int, name string) {
 }
 
 func (ms *MeteorSessions) GetAllJSON(name string) chan string {
-	return ms.GetCollection(name).GetAllJSON()
+	return (*ms.GetCollection(name)).GetAllJSON()
 }
 
 func (ms *MeteorSessions) GetSessionId(idx int) string {
@@ -39,8 +39,9 @@ func (ms *MeteorSessions) GetSessionId(idx int) string {
 }
 
 func (ms *MeteorSessions) GetSessionIdx(hash string) int {
-	for idx, ses := range ms.sessions {
-		if ses.GetId() == hash {
+
+	for idx := 0; idx < len(ms.sessions); idx++ {
+		if ms.sessions[idx].GetId() == hash {
 			return idx
 		}
 	}
@@ -51,22 +52,22 @@ func (ms *MeteorSessions) IsSubscribed(idx int, name string) bool {
 	return ms.sessions[idx].IsSubcribed(name)
 }
 
-func (ms *MeteorSessions) AddMethod(mName string, f func(params interface{})) {
+func (ms *MeteorSessions) AddMethod(mName string, f func(params interface{}) string) {
 	m := meteorMethods.Create(mName, f)
 	ms.methods = append(ms.methods, m)
 }
 
 func (ms *MeteorSessions) GetMethodIdx(name string) int {
-	for i, m := range ms.methods {
-		if m.NameEquals(name) {
+	for i := 0; i < len(ms.methods); i++ {
+		if ms.methods[i].NameEquals(name) {
 			return i
 		}
 	}
 	return -1
 }
 
-func (ms *MeteorSessions) CallMethodByIdx(idx int, params interface{}) {
-	ms.methods[idx].CallMethod(params)
+func (ms *MeteorSessions) CallMethodByIdx(idx int, params interface{}) string {
+	return ms.methods[idx].CallMethod(params)
 }
 
 // Добавить сессию в коллекцию
@@ -80,7 +81,7 @@ func (m *MeteorSessions) Length() int {
 
 func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 	log.Println("new sockjs session estabilished")
-	fmt.Println("Number of current sessions:", ms.Length())
+	//fmt.Println("Number of current sessions:", ms.Length())
 
 	// Канал, в который будут сыпаться все
 	transmitter := make(chan string)
@@ -152,7 +153,7 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 					} else {
 						var sess = m["session"].(string)
 
-						fmt.Println("Request to reconnect to old session: ", sess)
+						//fmt.Println("Request to reconnect to old session: ", sess)
 						ccId = ms.GetSessionIdx(sess)
 						if ccId == -1 {
 							fmt.Println("There is no old session, creating new one")
@@ -190,6 +191,7 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 							log.Println("Subscribing to:", subName)
 							ms.Subscribe(ccId, subName)
 							// Отправляем все записи согласно подписке
+							// NB!! Это корректное использование range!!!!!
 							for msg := range ms.GetAllJSON(subName) {
 								//fmt.Println("GotMsg:", msg)
 								transmitter <- msg
@@ -200,8 +202,7 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 						}
 
 						// Говорим, что все изменения вычитаны
-						msg := "{\"msg\": \"ready\", \"subs\": [\"" + m["id"].(string) + "\"]}"
-						transmitter <- msg
+						transmitter <- "{\"msg\": \"ready\", \"subs\": [\"" + m["id"].(string) + "\"]}"
 
 					} else {
 						log.Println("We don't provide subscription to : ", subName)
@@ -217,7 +218,6 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 				case "method":
 					//fmt.Println("Method call (Unrealized)")
 					m2 := m["params"].([]interface{})
-					//methodParams := m2[0].(map[string]interface{})
 					var methodId string
 					var methodName string
 
@@ -227,9 +227,6 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 					fmt.Println("Method Name: ", methodName)
 					fmt.Println("Method ID: ", methodId)
 					fmt.Println("Params: ", m2)
-					//for a, b := range methodParams {
-					//	fmt.Println("Params: ", a, " => ", b, " <Type> => ", reflect.TypeOf(b))
-					//}
 					log.Println("Call Method (Unrealized)")
 
 					if midx := ms.GetMethodIdx(methodName); midx == -1 {
@@ -237,7 +234,12 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 						transmitter <- "{\"msg\" :  \"result\", \"id\" : \"" + methodId + "\", \"error\" : \"method-not-found\" }"
 					} else {
 						log.Println("We have method:", methodName)
-						ms.CallMethodByIdx(midx, m2)
+						go func() {
+							result := ms.CallMethodByIdx(midx, m2)
+							fmt.Println("REEEEZUUULT: ", result)
+							transmitter <- "{\"msg\" :  \"result\", \"id\" : \"" + methodId + "\", \"result\" : \"+ result +\" }"
+							transmitter <- "{\"msg\" :  \"updated\", \"methods\" : [\"" + methodId + "\"] }"
+						}()
 					}
 
 					neeedPrint = false
@@ -262,24 +264,24 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 
 }
 
-func (ms *MeteorSessions) AddCollection(colName string, collection collections.Collection) {
+func (ms *MeteorSessions) AddCollection(colName string, collection collections.Collectioner) {
 
 	ms.collections = append(ms.collections, metCol{colName: colName, colStruct: &collection})
 }
 
 func (ms *MeteorSessions) HasCollection(colName string) bool {
-	for _, col := range ms.collections {
-		if col.colName == colName {
+	for i := 0; i < len(ms.collections); i++ {
+		if ms.collections[i].colName == colName {
 			return true
 		}
 	}
 	return false
 }
 
-func (ms *MeteorSessions) GetCollection(colName string) (col collections.Collection) {
-	for _, col := range ms.collections {
-		if col.colName == colName {
-			return *col.colStruct
+func (ms *MeteorSessions) GetCollection(colName string) (col *collections.Collectioner) {
+	for i := 0; i < len(ms.collections); i++ {
+		if ms.collections[i].colName == colName {
+			return ms.collections[i].colStruct
 		}
 	}
 	return nil

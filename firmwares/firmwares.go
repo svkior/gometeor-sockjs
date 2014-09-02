@@ -1,8 +1,15 @@
 package firmwares
 
 import (
+	//"../mydebug"
 	"../stringrand"
+	"code.google.com/p/go.net/html"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	//"reflect"
+	"strings"
 )
 
 type firmware struct {
@@ -18,10 +25,49 @@ type Firmwares struct {
 	firmwares []firmware
 }
 
+func (fw *Firmwares) PushChanges(id string) {
+	for i := 0; i < len(fw.firmwares); i++ {
+		if fw.firmwares[i].id == id {
+			//TODO: Real changes
+			fmt.Println("Changed: ", fw.firmwares[i])
+		}
+	}
+}
+
+func (fw *Firmwares) GetFwByName(fwname string) *firmware {
+	for i := 0; i < len(fw.firmwares); i++ {
+		fmt.Println("GetFwByName: ", fw.firmwares[i])
+		if fw.firmwares[i].fwname == fwname {
+			fmt.Println("Found: ", fwname)
+			return &fw.firmwares[i]
+		}
+	}
+	return nil
+}
+
+func (fw *Firmwares) UpdateFirmwareInfoByName(fwname string, param string, value string) {
+	fmt.Printf("UpdateFirmwareInfoByName %p\n", fw)
+
+	f := fw.GetFwByName(fwname)
+	if f == nil {
+		fw.Add(firmware{id: stringrand.RandString(16), fwname: fwname})
+		f = fw.GetFwByName(fwname)
+	}
+	switch param {
+	case "url":
+		f.url = value
+	case "description":
+		f.description = value
+	}
+	fw.PushChanges(f.id)
+}
+
 func (fw *Firmwares) Add(f firmware) {
 	f.id = stringrand.RandString(16)
 	//TODO: need to find duplications in random generation
 	fw.firmwares = append(fw.firmwares, f)
+	//TODO: Send info about add
+
 }
 
 func TestInitFirmwares(fw *Firmwares) {
@@ -33,25 +79,119 @@ func TestInitFirmwares(fw *Firmwares) {
 	})
 }
 
-func (fw Firmwares) GetAllJSON() (s chan string) {
+func (fw *Firmwares) GetAddedMsgByIdx(i int) string {
+	msg := fmt.Sprintf(
+		"{\"msg\": \"added\", \"collection\":\"firmwares\", \"id\": \"%s\", \"fields\":{\"url\":\"%s\",\"fwname\":\"%s\",\"description\":\"%s\",\"author\":\"%s\",\"downloaded\": %t }}",
+		fw.firmwares[i].id,
+		fw.firmwares[i].url,
+		fw.firmwares[i].fwname,
+		fw.firmwares[i].description,
+		fw.firmwares[i].author,
+		fw.firmwares[i].downloaded,
+	)
+	return msg
+}
+
+func (fw *Firmwares) GetChangedMsgByIdx(i int) string {
+	msg := fmt.Sprintf(
+		"{\"msg\": \"changed\", \"collection\":\"firmwares\", \"id\": \"%s\", \"fields\":{\"url\":\"%s\",\"fwname\":\"%s\",\"description\":\"%s\",\"author\":\"%s\",\"downloaded\": %t }}",
+		fw.firmwares[i].id,
+		fw.firmwares[i].url,
+		fw.firmwares[i].fwname,
+		fw.firmwares[i].description,
+		fw.firmwares[i].author,
+		fw.firmwares[i].downloaded,
+	)
+	return msg
+}
+
+func (fw *Firmwares) GetAllJSON() (s chan string) {
 	s = make(chan string)
+	fmt.Printf("GetAllJSON %p\n", fw)
 	go func() {
-		for _, v := range fw.firmwares {
-			s <- fmt.Sprintf(
-				"{\"msg\": \"added\", \"collection\":\"firmwares\", \"id\": \"%s\", \"fields\":{\"url\":\"%s\",\"fwname\":\"%s\",\"description\":\"%s\",\"author\":\"%s\",\"downloaded\": %t }}",
-				v.id,
-				v.url,
-				v.fwname,
-				v.description,
-				v.author,
-				v.downloaded,
-			)
+
+		for i := 0; i < len(fw.firmwares); i++ {
+			s <- fw.GetAddedMsgByIdx(i)
 		}
 		close(s)
 	}()
 	return
 }
 
-func (fw Firmwares) Scan4DAV(params interface{}) {
-	fmt.Println("Hello, World!")
+func (fw *Firmwares) Scan4DAV(params interface{}) string {
+	log.Println("Scanning web directory for firmwares")
+	//mydebug.PrintDebug("FW After new", fw)
+
+	m2 := params.([]interface{})
+	methodParams := m2[0].(map[string]interface{})
+	var pattern string
+	var url string
+	for a, b := range methodParams {
+		//fmt.Println("Params: ", a, " => ", b, " <Type> => ", reflect.TypeOf(b))
+		switch a {
+		case "pattern":
+			pattern = b.(string)
+		case "dirname":
+			url = b.(string)
+		}
+	}
+
+	// Здесь нужно запустить http клиента
+
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth("svkior", "forserveryf[")
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("Error : %s", err)
+	}
+	defer resp.Body.Close()
+	/*
+		body, err := ioutil.ReadAll(resp.Body)
+		fmt.Println(string(body))
+	*/
+
+	doc, err := html.Parse(resp.Body)
+
+	if err != nil {
+		fmt.Printf("Error : %s", err)
+	}
+
+	var f func(*html.Node)
+
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			for _, attrs := range n.Attr {
+				if attrs.Key == "href" {
+					if strings.Contains(attrs.Val, pattern) {
+						id := ""
+						if strings.Contains(attrs.Val, ".bit") {
+							id = strings.Replace(attrs.Val, ".bit", "", -1)
+							fmt.Println(" BIT -> ", attrs.Val, " ID = ", id)
+							fw.UpdateFirmwareInfoByName(id, "url", url+attrs.Val)
+						} else if strings.Contains(attrs.Val, "_info") {
+							id = strings.Replace(attrs.Val, "_info", "", -1)
+							fmt.Println(" INF -> ", attrs.Val, " ID = ", id)
+
+							req2, err := http.NewRequest("GET", url+attrs.Val, nil)
+							req2.SetBasicAuth("svkior", "forserveryf[")
+							resp2, err := client.Do(req2)
+							if err != nil {
+								fmt.Printf("Error : %s", err)
+							}
+							defer resp2.Body.Close()
+							body2, err := ioutil.ReadAll(resp.Body)
+							fmt.Println(body2)
+							fw.UpdateFirmwareInfoByName(id, "description", string(body2))
+						}
+					}
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
+	return "[]"
 }
