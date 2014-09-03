@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	//"reflect"
+	"encoding/json"
 	"strings"
 )
 
@@ -22,23 +23,134 @@ type firmware struct {
 }
 
 type Firmwares struct {
-	firmwares []firmware
+	firmwares   []firmware
+	subscribers []chan string
 }
 
-func (fw *Firmwares) PushChanges(id string) {
+func (fw *Firmwares) Remove(params interface{}) string {
+	/* From Meteor DDP Analyzer
+	2  OUT  3646  {
+		"msg":"method",
+		"method":"/firmwares/remove",
+		"params":[{
+			"_id":"cMFtnvjD6TaLFZQkH"
+		}],
+		"id":"1"}
+	2  IN   6  {
+		"msg":"removed",
+		"collection":"firmwares",
+		"id":"cMFtnvjD6TaLFZQkH"
+	}
+	2  IN   2  {
+		"msg":"result",
+		"id":"1",
+		"result":1
+	}
+	2  IN   1  {
+		"msg":"updated",
+		"methods":["1"]
+	}
+	*/
+
+	// TODO: Remove record by ID
+	// TODO: Format result
+	return "[]"
+}
+
+func (fw *Firmwares) Insert(params interface{}) string {
+	/* From Meteor DDP Analyzer
+	1  OUT  13271  {
+		"msg":"method",
+	   	"method":"/firmwares/insert",
+	   	"params":[{
+	   		"author":"svkior",
+	   		"url":"http://localhost:3000/superproshivha1.bit",
+	   		"fwname":"top_arm_from_hell.bit",
+	   		"description":"qwe"
+	   	}],
+	   	"id":"1",
+	   	"randomSeed":"38842ec8265a97554324"
+	}
+	1  IN   21  {
+		"msg":"result",
+	   	"id":"1",
+	   	"result":[{
+	   		"author":"svkior",
+	   		"url":"http://localhost:3000/superproshivha1.bit",
+	   		"fwname":"top_arm_from_hell.bit",
+	   		"description":"qwe",
+	   		"_id":"5oGxoS5FzLb9u6vrQ"}
+	   ]
+	}
+	1  IN   0  {
+		"msg":"added",
+		"collection":"firmwares",
+		"id":"5oGxoS5FzLb9u6vrQ",
+		"fields":{
+			"author":"svkior",
+			"url":"http://localhost:3000/superproshivha1.bit",
+			"fwname":"top_arm_from_hell.bit",
+			"description":"qwe"
+		}
+	}
+	1  IN   2  {
+		"msg":"updated",
+		"methods":["1"]
+	}
+	*/
+
+	fmt.Println("NEEED TO INSERT DOCUMENT: ", params)
+
+	m2 := params.([]interface{})
+	methodParams := m2[0].(map[string]interface{})
+
+	fmt.Println("Method params: ", methodParams)
+
+	if methodParams["fwname"] == nil {
+		methodParams["fwname"] = "NoName_" + stringrand.RandString(4)
+	}
+
+	fwname := methodParams["fwname"].(string)
+	for par, val := range methodParams {
+		if par != "fwname" {
+			fmt.Println("Update ", par, " => ", val)
+			fw.UpdateFirmwareInfoByName(fwname, par, val.(string))
+		}
+	}
+	methodParams["_id"] = fw.GetFwByName(fwname).id
+
+	marshalled, _ := json.Marshal(methodParams)
+
+	return "[" + string(marshalled) + "]"
+}
+
+func (fw *Firmwares) SubscribeChan() (s chan string) {
+	s = make(chan string)
+	fw.subscribers = append(fw.subscribers, s)
+	return
+}
+
+func (fw *Firmwares) PushChanges(id string, added bool) {
 	for i := 0; i < len(fw.firmwares); i++ {
 		if fw.firmwares[i].id == id {
 			//TODO: Real changes
 			fmt.Println("Changed: ", fw.firmwares[i])
+			for j := 0; j < len(fw.subscribers); j++ {
+				if added {
+					fw.subscribers[j] <- fw.GetAddedMsgByIdx(i)
+				} else {
+					fw.subscribers[j] <- fw.GetChangedMsgByIdx(i)
+				}
+			}
 		}
 	}
 }
 
 func (fw *Firmwares) GetFwByName(fwname string) *firmware {
 	for i := 0; i < len(fw.firmwares); i++ {
-		fmt.Println("GetFwByName: ", fw.firmwares[i])
+		//fmt.Println("GetFwByName: ", fw.firmwares[i])
 		if fw.firmwares[i].fwname == fwname {
-			fmt.Println("Found: ", fwname)
+			//fmt.Println("Found: ", fwname)
 			return &fw.firmwares[i]
 		}
 	}
@@ -46,12 +158,14 @@ func (fw *Firmwares) GetFwByName(fwname string) *firmware {
 }
 
 func (fw *Firmwares) UpdateFirmwareInfoByName(fwname string, param string, value string) {
+	var added bool
 	fmt.Printf("UpdateFirmwareInfoByName %p\n", fw)
 
 	f := fw.GetFwByName(fwname)
 	if f == nil {
 		fw.Add(firmware{id: stringrand.RandString(16), fwname: fwname})
 		f = fw.GetFwByName(fwname)
+		added = true
 	}
 	switch param {
 	case "url":
@@ -59,7 +173,9 @@ func (fw *Firmwares) UpdateFirmwareInfoByName(fwname string, param string, value
 	case "description":
 		f.description = value
 	}
-	fw.PushChanges(f.id)
+	fw.PushChanges(f.id, added)
+
+	//fmt.Println("Finish UpdateFirmwareInfoByName")
 }
 
 func (fw *Firmwares) Add(f firmware) {
@@ -67,7 +183,6 @@ func (fw *Firmwares) Add(f firmware) {
 	//TODO: need to find duplications in random generation
 	fw.firmwares = append(fw.firmwares, f)
 	//TODO: Send info about add
-
 }
 
 func TestInitFirmwares(fw *Firmwares) {
@@ -167,11 +282,11 @@ func (fw *Firmwares) Scan4DAV(params interface{}) string {
 						id := ""
 						if strings.Contains(attrs.Val, ".bit") {
 							id = strings.Replace(attrs.Val, ".bit", "", -1)
-							fmt.Println(" BIT -> ", attrs.Val, " ID = ", id)
+							//fmt.Println(" BIT -> ", attrs.Val, " ID = ", id)
 							fw.UpdateFirmwareInfoByName(id, "url", url+attrs.Val)
 						} else if strings.Contains(attrs.Val, "_info") {
 							id = strings.Replace(attrs.Val, "_info", "", -1)
-							fmt.Println(" INF -> ", attrs.Val, " ID = ", id)
+							//fmt.Println(" INF -> ", attrs.Val, " ID = ", id)
 
 							req2, err := http.NewRequest("GET", url+attrs.Val, nil)
 							req2.SetBasicAuth("svkior", "forserveryf[")
@@ -181,7 +296,7 @@ func (fw *Firmwares) Scan4DAV(params interface{}) string {
 							}
 							defer resp2.Body.Close()
 							body2, err := ioutil.ReadAll(resp.Body)
-							fmt.Println(body2)
+							//fmt.Println(body2)
 							fw.UpdateFirmwareInfoByName(id, "description", string(body2))
 						}
 					}
@@ -193,5 +308,7 @@ func (fw *Firmwares) Scan4DAV(params interface{}) string {
 		}
 	}
 	f(doc)
+
+	fmt.Println("FINISH CALLING METHOD SCAN4DAV")
 	return "[]"
 }

@@ -34,6 +34,10 @@ func (ms *MeteorSessions) GetAllJSON(name string) chan string {
 	return (*ms.GetCollection(name)).GetAllJSON()
 }
 
+func (ms *MeteorSessions) SubscribeChan(name string) chan string {
+	return (*ms.GetCollection(name)).SubscribeChan()
+}
+
 func (ms *MeteorSessions) GetSessionId(idx int) string {
 	return ms.sessions[idx].GetId()
 }
@@ -50,6 +54,12 @@ func (ms *MeteorSessions) GetSessionIdx(hash string) int {
 
 func (ms *MeteorSessions) IsSubscribed(idx int, name string) bool {
 	return ms.sessions[idx].IsSubcribed(name)
+}
+
+func (ms *MeteorSessions) AddCollection(colName string, collection collections.Collectioner) {
+
+	ms.collections = append(ms.collections, metCol{colName: colName, colStruct: &collection})
+	ms.AddMethod("/"+colName+"/insert", collection.Insert)
 }
 
 func (ms *MeteorSessions) AddMethod(mName string, f func(params interface{}) string) {
@@ -197,6 +207,20 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 								transmitter <- msg
 							}
 
+							// Подписываемся на коллекции
+							go func() {
+								var firmchan chan string
+								// FIXME: Нужно придумать как грохать эту хрень когда клиент закрывается
+								firmchan = ms.SubscribeChan(subName)
+								for {
+									select {
+									case msg2 := <-firmchan:
+										log.Println("Send changes from collection to client: ", msg2)
+										transmitter <- msg2
+									}
+								}
+							}()
+
 						} else {
 							log.Println("Already subscribed to:", subName)
 						}
@@ -227,7 +251,6 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 					fmt.Println("Method Name: ", methodName)
 					fmt.Println("Method ID: ", methodId)
 					fmt.Println("Params: ", m2)
-					log.Println("Call Method (Unrealized)")
 
 					if midx := ms.GetMethodIdx(methodName); midx == -1 {
 						log.Println("There is no such method", methodName)
@@ -262,11 +285,6 @@ func (ms *MeteorSessions) MeteorHandler(session sockjs.Session) {
 	//close(closedSession)
 	log.Println("sockjs session closed")
 
-}
-
-func (ms *MeteorSessions) AddCollection(colName string, collection collections.Collectioner) {
-
-	ms.collections = append(ms.collections, metCol{colName: colName, colStruct: &collection})
 }
 
 func (ms *MeteorSessions) HasCollection(colName string) bool {
