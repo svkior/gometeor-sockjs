@@ -60,6 +60,8 @@ func (ms *MeteorSessions) AddCollection(colName string, collection collections.C
 
 	ms.collections = append(ms.collections, metCol{colName: colName, colStruct: &collection})
 	ms.AddMethod("/"+colName+"/insert", collection.Insert)
+	ms.AddMethod("/"+colName+"/remove", collection.Remove)
+	ms.AddMethod("/"+colName+"/update", collection.Update)
 }
 
 func (ms *MeteorSessions) AddMethod(mName string, f func(params interface{}) string) {

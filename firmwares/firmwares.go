@@ -27,6 +27,54 @@ type Firmwares struct {
 	subscribers []chan string
 }
 
+func (fw *Firmwares) Update(params interface{}) string {
+	/* From Meteor DDP Analyzer
+		1  OUT  2210  {
+			"msg":"method",
+			"method":"/firmwares/update",
+			"params":[{
+				"_id":"kKqkJEZNf4d5KDJkj"},
+				{
+					"$set":{
+						"author":"fff2"
+					}
+				},
+				{}
+			],
+			"id":"3"
+		}
+	 	1  IN   5  {
+	 		"msg":"result",
+	 		"id":"3",
+	 		"result":1
+	 	}
+	 	1  IN   2  {
+	 		"msg":"changed",
+	 		"collection":"firmwares",
+	 		"id":"kKqkJEZNf4d5KDJkj",
+	 		"fields":{
+	 			"author":"fff2"
+	 		}
+	 	}
+	 	1  IN   1  {
+	 		"msg":"updated",
+	 		"methods":["3"]
+	 	}
+	*/
+
+	fmt.Println("NEEED TO UPDATE DOCUMENT: ", params)
+	m2 := params.([]interface{})
+	methodParams := m2[0].(map[string]interface{})
+	methodArgs := m2[1].(map[string]interface{})
+	methodModifiers := m2[2].(map[string]interface{})
+
+	fmt.Println("Method Params = ", methodParams)
+	fmt.Println("Method Args = ", methodArgs)
+	fmt.Println("Method Modifiers = ", methodModifiers)
+
+	return "[]"
+}
+
 func (fw *Firmwares) Remove(params interface{}) string {
 	/* From Meteor DDP Analyzer
 	2  OUT  3646  {
@@ -35,7 +83,8 @@ func (fw *Firmwares) Remove(params interface{}) string {
 		"params":[{
 			"_id":"cMFtnvjD6TaLFZQkH"
 		}],
-		"id":"1"}
+		"id":"1"
+	}
 	2  IN   6  {
 		"msg":"removed",
 		"collection":"firmwares",
@@ -52,9 +101,20 @@ func (fw *Firmwares) Remove(params interface{}) string {
 	}
 	*/
 
+	fmt.Println("NEEED TO DELETE DOCUMENT: ", params)
+	m2 := params.([]interface{})
+	methodParams := m2[0].(map[string]interface{})
+
+	//fmt.Println("Method Params = ", methodParams)
+
+	fw.DebugPrintAll()
 	// TODO: Remove record by ID
-	// TODO: Format result
-	return "[]"
+	fw.RemoveRecordById(methodParams["_id"].(string))
+
+	fw.DebugPrintAll()
+
+	marshalled, _ := json.Marshal(methodParams)
+	return "[" + string(marshalled) + "]"
 }
 
 func (fw *Firmwares) Insert(params interface{}) string {
@@ -130,16 +190,21 @@ func (fw *Firmwares) SubscribeChan() (s chan string) {
 	return
 }
 
-func (fw *Firmwares) PushChanges(id string, added bool) {
+func (fw *Firmwares) PushChanges(id string, oper string) {
 	for i := 0; i < len(fw.firmwares); i++ {
 		if fw.firmwares[i].id == id {
 			//TODO: Real changes
 			fmt.Println("Changed: ", fw.firmwares[i])
 			for j := 0; j < len(fw.subscribers); j++ {
-				if added {
+				switch oper {
+				case "added":
 					fw.subscribers[j] <- fw.GetAddedMsgByIdx(i)
-				} else {
+				case "changed":
 					fw.subscribers[j] <- fw.GetChangedMsgByIdx(i)
+				case "removed":
+					fw.subscribers[j] <- fw.GetRemovedMsgByIdx(i)
+				default:
+					log.Panic("FUCK")
 				}
 			}
 		}
@@ -157,15 +222,36 @@ func (fw *Firmwares) GetFwByName(fwname string) *firmware {
 	return nil
 }
 
+func (fw *Firmwares) RemoveRecordById(id string) {
+	for i := 0; i < len(fw.firmwares); i++ {
+		if fw.firmwares[i].id == id {
+
+			copy(fw.firmwares[i:], fw.firmwares[i+1:])
+			fw.firmwares[len(fw.firmwares)-1] = firmware{}
+			fw.firmwares = fw.firmwares[:len(fw.firmwares)-1]
+			fw.PushDeletedById(id)
+			return
+		}
+	}
+}
+
+func (fw *Firmwares) DebugPrintAll() {
+
+	for i := 0; i < len(fw.firmwares); i++ {
+		log.Println("(", i, ") INFO: ", fw.firmwares[i])
+	}
+}
+
 func (fw *Firmwares) UpdateFirmwareInfoByName(fwname string, param string, value string) {
-	var added bool
+	var added string
+	added = "changed"
 	fmt.Printf("UpdateFirmwareInfoByName %p\n", fw)
 
 	f := fw.GetFwByName(fwname)
 	if f == nil {
 		fw.Add(firmware{id: stringrand.RandString(16), fwname: fwname})
 		f = fw.GetFwByName(fwname)
-		added = true
+		added = "added"
 	}
 	switch param {
 	case "url":
@@ -216,6 +302,25 @@ func (fw *Firmwares) GetChangedMsgByIdx(i int) string {
 		fw.firmwares[i].description,
 		fw.firmwares[i].author,
 		fw.firmwares[i].downloaded,
+	)
+	return msg
+}
+
+func (fw *Firmwares) PushDeletedById(id string) {
+	msg := fmt.Sprintf(
+		"{\"msg\": \"removed\", \"collection\":\"firmwares\", \"id\": \"%s\"}",
+		id,
+	)
+	for j := 0; j < len(fw.subscribers); j++ {
+		fw.subscribers[j] <- msg
+	}
+
+}
+
+func (fw *Firmwares) GetRemovedMsgByIdx(i int) string {
+	msg := fmt.Sprintf(
+		"{\"msg\": \"removed\", \"collection\":\"firmwares\", \"id\": \"%s\"}",
+		fw.firmwares[i].id,
 	)
 	return msg
 }
